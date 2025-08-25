@@ -3,26 +3,64 @@
 # User-friendly interface for real-time traffic sign classification
 
 import streamlit as st
-import tensorflow as tf
-import numpy as np
-import pandas as pd
-import cv2
-import os
-import plotly.graph_objects as go
-import plotly.express as px
-from pathlib import Path
 import sys
-import matplotlib.pyplot as plt
-import seaborn as sns
+import os
+from pathlib import Path
 
 # Add src directory to path for imports
 sys.path.append(str(Path(__file__).parent.parent / "Src"))
 
-from utils import preprocess_image_for_prediction, get_prediction_with_confidence
-from traffic_sign_classes import (
-    TRAFFIC_SIGN_CLASSES, CATEGORY_COLORS, CATEGORY_DESCRIPTIONS,
-    get_class_info, get_class_names, get_categories, get_classes_by_category
-)
+# Handle import errors gracefully
+try:
+    import tensorflow as tf
+    import numpy as np
+    import pandas as pd
+    import cv2
+    import plotly.graph_objects as go
+    import plotly.express as px
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    
+    from utils import preprocess_image_for_prediction, get_prediction_with_confidence
+    from traffic_sign_classes import (
+        TRAFFIC_SIGN_CLASSES, CATEGORY_COLORS, CATEGORY_DESCRIPTIONS,
+        get_class_info, get_class_names, get_categories, get_classes_by_category
+    )
+    
+    IMPORTS_SUCCESSFUL = True
+except ImportError as e:
+    st.error(f"""
+    ## 🚨 Import Error
+    
+    The application encountered an error while importing required libraries:
+    
+    **Error:** {str(e)}
+    
+    ### 🔧 Solution
+    
+    This is likely due to a NumPy version compatibility issue. Please ensure you have the correct versions:
+    
+    ```bash
+    pip install "numpy==1.26.4"
+    pip install "opencv-python==4.8.1.78"
+    pip install "tensorflow>=2.10.0"
+    ```
+    
+    ### 📋 Current Requirements
+    
+    Make sure your `requirements.txt` contains:
+    ```
+    numpy==1.26.4
+    opencv-python==4.8.1.78
+    tensorflow>=2.10.0
+    ```
+    
+    If you're deploying on Streamlit Cloud, please check the deployment logs for more details.
+    """)
+    IMPORTS_SUCCESSFUL = False
+    st.stop()
+
+
 
 # =========================
 # Page Configuration

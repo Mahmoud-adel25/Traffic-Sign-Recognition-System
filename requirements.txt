@@ -1,7 +1,7 @@
 tensorflow>=2.10.0
 opencv-python==4.8.1.78
 pandas>=1.3.0
-numpy<2
+numpy==1.26.4
 scikit-learn>=1.0.0
 matplotlib>=3.5.0
 seaborn>=0.11.0
