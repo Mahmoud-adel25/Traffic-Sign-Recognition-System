@@ -6,59 +6,25 @@ import streamlit as st
 import sys
 import os
 from pathlib import Path
-
-# Add src directory to path for imports
+import pandas as pd
 sys.path.append(str(Path(__file__).parent.parent / "Src"))
 
-# Handle import errors gracefully
-try:
-    import tensorflow as tf
-    import numpy as np
-    import pandas as pd
-    import cv2
-    import plotly.graph_objects as go
-    import plotly.express as px
-    import matplotlib.pyplot as plt
-    import seaborn as sns
+import tensorflow as tf
+import numpy as np
+import pandas as pd
+import cv2
+import plotly.graph_objects as go
+import plotly.express as px
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+from utils import preprocess_image_for_prediction, get_prediction_with_confidence
+from traffic_sign_classes import (
+    TRAFFIC_SIGN_CLASSES, CATEGORY_COLORS, CATEGORY_DESCRIPTIONS,
+    get_class_info, get_class_names, get_categories, get_classes_by_category
+)
     
-    from utils import preprocess_image_for_prediction, get_prediction_with_confidence
-    from traffic_sign_classes import (
-        TRAFFIC_SIGN_CLASSES, CATEGORY_COLORS, CATEGORY_DESCRIPTIONS,
-        get_class_info, get_class_names, get_categories, get_classes_by_category
-    )
-    
-    IMPORTS_SUCCESSFUL = True
-except ImportError as e:
-    st.error(f"""
-    ## 🚨 Import Error
-    
-    The application encountered an error while importing required libraries:
-    
-    **Error:** {str(e)}
-    
-    ### 🔧 Solution
-    
-    This is likely due to a NumPy version compatibility issue. Please ensure you have the correct versions:
-    
-    ```bash
-    pip install "numpy==1.26.4"
-    pip install "opencv-python==4.8.1.78"
-    pip install "tensorflow>=2.10.0"
-    ```
-    
-    ### 📋 Current Requirements
-    
-    Make sure your `requirements.txt` contains:
-    ```
-    numpy==1.26.4
-    opencv-python==4.8.1.78
-    tensorflow>=2.10.0
-    ```
-    
-    If you're deploying on Streamlit Cloud, please check the deployment logs for more details.
-    """)
-    IMPORTS_SUCCESSFUL = False
-    st.stop()
+IMPORTS_SUCCESSFUL = True
 
 # =========================
 # Page Configuration
@@ -70,280 +36,1144 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for dark mode styling
+# Enhanced Modern Dark Theme
 st.markdown("""
 <style>
-    /* Dark mode background and text colors */
+    /* Modern dark theme with improved accessibility */
     .stApp {
-        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-        color: #ffffff;
+        background: linear-gradient(135deg, #0e1117 0%, #1a1f2e 100%) !important;
+        color: #ffffff !important;
+        font-family: 'Segoe UI', system-ui, -apple-system, sans-serif !important;
     }
     
-    /* Main header with dark theme */
+    /* Enhanced header styling */
+    header[data-testid="stHeader"] {
+        background: linear-gradient(90deg, #1a1f2e 0%, #262730 100%) !important;
+        border-bottom: 2px solid #3b82f6 !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+    }
+    
+    .stAppHeader {
+        background-color: transparent !important;
+    }
+    
+    /* Enhanced toolbar */
+    .stToolbar {
+        background: linear-gradient(90deg, #1a1f2e 0%, #262730 100%) !important;
+    }
+    
+    /* Main content area with subtle animation */
+    .main .block-container {
+        background-color: transparent !important;
+        padding-top: 2rem !important;
+        animation: fadeIn 0.5s ease-in;
+    }
+    
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    
+    /* Enhanced sidebar with glassmorphism effect */
+    .stSidebar {
+        background: linear-gradient(135deg, rgba(38, 39, 48, 0.95) 0%, rgba(26, 31, 46, 0.95) 100%) !important;
+        backdrop-filter: blur(10px) !important;
+        border-right: 1px solid rgba(59, 130, 246, 0.3) !important;
+    }
+    
+    /* Clean white text hierarchy */
+    * {
+        color: #ffffff !important;
+    }
+    
+    p, span, div, label {
+        color: #ffffff !important;
+        line-height: 1.6 !important;
+    }
+    
+    /* Pure white headings */
+    h1, h2, h3, h4, h5, h6 {
+        color: #ffffff !important;
+        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+    }
+    
+    /* Pure white text */
+    .stMarkdown p {
+        color: #ffffff !important;
+    }
+    
+    .stMarkdown strong {
+        color: #ffffff !important;
+        font-weight: 600 !important;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2) !important;
+    }
+    
+    /* Enhanced header with gradient and animation */
     .main-header {
-        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-        padding: 2rem;
-        border-radius: 10px;
-        color: white;
+        background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 50%, #6366f1 100%);
+        padding: 3rem 2rem;
+        border-radius: 20px;
         text-align: center;
         margin-bottom: 2rem;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        border: 1px solid rgba(59, 130, 246, 0.3);
+        box-shadow: 0 10px 30px rgba(59, 130, 246, 0.2);
+        position: relative;
+        overflow: hidden;
     }
     
-    /* Dark info boxes */
+    .main-header::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+        animation: shimmer 3s infinite;
+    }
+    
+    @keyframes shimmer {
+        0% { left: -100%; }
+        100% { left: 100%; }
+    }
+    
+    .main-header h1 {
+        color: #ffffff;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    }
+    
+    .main-header p {
+        color: #ffffff;
+        margin-top: 0.5rem;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    }
+    
     .info-box {
-        background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
-        padding: 1.5rem;
-        border-radius: 15px;
-        border-left: 5px solid #4299e1;
-        margin: 1.2rem 0;
-        color: #e2e8f0;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-        transition: all 0.3s ease;
-        font-weight: 500;
-    }
-    .info-box:hover {
-        transform: translateX(3px);
-        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
-        border-left-color: #3182ce;
-        background: linear-gradient(135deg, #2d3748 0%, #2c5282 100%);
-    }
-    .info-box h4 {
-        color: #63b3ed;
-        font-size: 1.2rem;
-        font-weight: 700;
-        margin-bottom: 0.8rem;
-        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-    }
-    .info-box p {
-        color: #cbd5e0;
-        font-size: 1rem;
-        line-height: 1.6;
-        margin: 0.5rem 0;
-        font-weight: 500;
-    }
-    .info-box strong {
-        color: #4299e1;
-        font-weight: 700;
-    }
-    
-    /* Dark prediction box */
-    .prediction-box {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: linear-gradient(135deg, rgba(38, 39, 48, 0.8) 0%, rgba(26, 31, 46, 0.8) 100%);
         padding: 2rem;
         border-radius: 15px;
-        color: white;
-        text-align: center;
-        margin: 1rem 0;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        border: 1px solid rgba(59, 130, 246, 0.2);
+        margin: 1.5rem 0;
+        backdrop-filter: blur(10px);
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+        transition: all 0.3s ease;
+        position: relative;
     }
     
-    /* Dark metric cards */
-    .metric-card {
-        background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
-        padding: 1.5rem;
-        border-radius: 15px;
-        border: 2px solid #4299e1;
-        text-align: center;
-        margin: 0.8rem 0;
-        color: #e2e8f0;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-        transition: all 0.3s ease;
-        font-weight: 500;
+    .info-box:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 12px 35px rgba(59, 130, 246, 0.3);
+        border-color: rgba(59, 130, 246, 0.4);
     }
-    .metric-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
-        border-color: #3182ce;
-        background: linear-gradient(135deg, #2d3748 0%, #2c5282 100%);
+    
+    .info-box h4 {
+        color: #ffffff;
+        font-weight: 600;
+        margin-bottom: 0.8rem;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
     }
-    .metric-card h3 {
-        color: #63b3ed;
-        font-size: 1.8rem;
-        font-weight: 700;
+    
+    .info-box p {
+        color: #ffffff;
         margin: 0.5rem 0;
-        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
     }
-    .metric-card h4 {
-        color: #cbd5e0;
-        font-size: 1.1rem;
+    
+    .info-box strong {
+        color: #ffffff;
+        font-weight: 600;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    }
+    
+    .prediction-box {
+        background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+        padding: 2.5rem;
+        border-radius: 20px;
+        border: 2px solid rgba(59, 130, 246, 0.5);
+        text-align: center;
+        margin: 1.5rem 0;
+        box-shadow: 0 15px 40px rgba(59, 130, 246, 0.3);
+        animation: pulse 2s infinite;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    @keyframes pulse {
+        0%, 100% { box-shadow: 0 15px 40px rgba(59, 130, 246, 0.3); }
+        50% { box-shadow: 0 20px 50px rgba(59, 130, 246, 0.5); }
+    }
+    
+    .prediction-box::after {
+        content: '';
+        position: absolute;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
+        animation: rotate 10s linear infinite;
+        pointer-events: none;
+    }
+    
+    @keyframes rotate {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+    
+    .prediction-box h2 {
+        color: #ffffff;
         font-weight: 600;
         margin-bottom: 0.5rem;
     }
-    .metric-card small {
-        color: #a0aec0;
-        font-size: 0.85rem;
-        font-weight: 500;
-        opacity: 0.9;
+    
+    .metric-card {
+        background: linear-gradient(145deg, #262730 0%, #1a1f2e 100%);
+        padding: 2rem;
+        border-radius: 15px;
+        border: 1px solid rgba(59, 130, 246, 0.2);
+        text-align: center;
+        margin: 1rem 0;
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        position: relative;
+        overflow: hidden;
     }
     
-    /* Dark category cards */
+    .metric-card:hover {
+        transform: translateY(-5px) scale(1.02);
+        box-shadow: 0 15px 40px rgba(59, 130, 246, 0.25);
+        border-color: rgba(59, 130, 246, 0.4);
+    }
+    
+    .metric-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 2px;
+        background: linear-gradient(90deg, #3b82f6, #6366f1, #8b5cf6);
+        transform: scaleX(0);
+        transition: transform 0.3s ease;
+    }
+    
+    .metric-card:hover::before {
+        transform: scaleX(1);
+    }
+    
+    .metric-card h3 {
+        color: #3b82f6;
+        font-weight: 600;
+        margin: 0.5rem 0;
+    }
+    
+    .metric-card h4 {
+        color: #fafafa;
+        font-weight: 500;
+        margin-bottom: 0.5rem;
+    }
+    
+    .metric-card small {
+        color: #a3a8b4;
+        font-size: 0.9rem;
+    }
+    
     .category-card {
-        background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
-        padding: 2rem;
-        border-radius: 20px;
-        border: 3px solid #48bb78;
-        margin: 1.2rem 0;
-        color: #e2e8f0;
-        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
-        transition: all 0.3s ease;
+        background-color: #262730;
+        padding: 1.5rem;
+        border-radius: 10px;
+        border: 1px solid #464c5c;
+        margin: 1rem 0;
     }
-    .category-card:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
-        border-color: #38a169;
-        background: linear-gradient(135deg, #2d3748 0%, #22543d 100%);
-    }
+    
     .category-card h3 {
-        color: #68d391;
-        font-size: 1.6rem;
-        font-weight: 700;
-        margin-bottom: 1rem;
-        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-    }
-    .category-card h4 {
-        color: #9ae6b4;
-        font-size: 1.3rem;
+        color: #3b82f6;
         font-weight: 600;
         margin-bottom: 0.8rem;
     }
+    
+    .category-card h4 {
+        color: #fafafa;
+        font-weight: 500;
+        margin-bottom: 0.5rem;
+    }
+    
     .category-card p {
-        color: #cbd5e0;
+        color: #a3a8b4;
         font-size: 1rem;
-        line-height: 1.6;
+        line-height: 1.5;
         margin: 0.5rem 0;
     }
+    
     .category-card small {
-        color: #a0aec0;
+        color: #a3a8b4;
         font-size: 0.9rem;
         font-style: italic;
-        opacity: 0.8;
     }
     
-    /* Dark class info boxes */
     .class-info-box {
-        background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
-        padding: 1.2rem;
-        border-radius: 12px;
-        border-left: 5px solid #4299e1;
-        margin: 0.8rem 0;
-        color: #e2e8f0;
-        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
-        transition: all 0.3s ease;
+        background-color: #262730;
+        padding: 1rem;
+        border-radius: 8px;
+        border-left: 4px solid #3b82f6;
+        margin: 0.5rem 0;
+        border: 1px solid #464c5c;
     }
-    .class-info-box:hover {
-        transform: translateX(3px);
-        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.4);
-        border-left-color: #3182ce;
-        background: linear-gradient(135deg, #2d3748 0%, #2c5282 100%);
-    }
+    
     .class-info-box strong {
-        color: #63b3ed;
-        font-weight: 700;
-        font-size: 1.1rem;
+        color: #fafafa;
+        font-weight: 600;
+        font-size: 1rem;
     }
+    
     .class-info-box small {
-        color: #a0aec0;
+        color: #a3a8b4;
         font-size: 0.9rem;
-        line-height: 1.5;
-        font-weight: 500;
+        line-height: 1.4;
+        display: block;
+        margin-top: 0.3rem;
     }
     
-    /* Dark sidebar */
-    .sidebar .sidebar-content {
-        background: linear-gradient(180deg, #2d3748 0%, #1a202c 100%);
-    }
-    
-    /* Dark visualization containers */
     .visualization-container {
-        background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+        background: linear-gradient(135deg, rgba(38, 39, 48, 0.9) 0%, rgba(26, 31, 46, 0.9) 100%);
         padding: 2rem;
-        border-radius: 15px;
-        border: 2px solid #4299e1;
-        margin: 1.2rem 0;
-        color: #e2e8f0;
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        border-radius: 20px;
+        border: 1px solid rgba(59, 130, 246, 0.2);
+        margin: 1.5rem 0;
+        backdrop-filter: blur(15px);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
         transition: all 0.3s ease;
+        position: relative;
     }
+    
     .visualization-container:hover {
         transform: translateY(-2px);
-        box-shadow: 0 6px 25px rgba(0, 0, 0, 0.4);
-        border-color: #3182ce;
-        background: linear-gradient(135deg, #2d3748 0%, #2c5282 100%);
-    }
-    .visualization-container h4 {
-        color: #63b3ed;
-        font-size: 1.3rem;
-        font-weight: 700;
-        margin-bottom: 1rem;
-        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-    }
-    .visualization-container p {
-        color: #cbd5e0;
-        font-size: 1rem;
-        line-height: 1.6;
-        margin: 0.5rem 0;
-        font-weight: 500;
-    }
-    .visualization-container h2 {
-        color: #4299e1;
-        font-size: 2.2rem;
-        font-weight: 800;
-        margin: 0.5rem 0;
-        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        box-shadow: 0 15px 40px rgba(59, 130, 246, 0.2);
+        border-color: rgba(59, 130, 246, 0.3);
     }
     
-    /* Additional dark mode styling for Streamlit elements */
-    .stTabs [data-baseweb="tab-list"] {
-        background-color: #2d3748;
+    .visualization-container::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.5), transparent);
+    }
+    
+    .visualization-container h4 {
+        color: #fafafa;
+        font-weight: 600;
+        margin-bottom: 0.8rem;
+    }
+    
+    .visualization-container p {
+        color: #a3a8b4;
+        font-size: 1rem;
+        line-height: 1.5;
+        margin: 0.5rem 0;
+    }
+    
+    .visualization-container h2 {
+        color: #3b82f6;
+        font-weight: 600;
+        margin: 0.5rem 0;
+    }
+    
+    /* Enhanced text colors and contrast */
+    h1, h2, h3, h4, h5, h6 {
+        color: #ffffff !important;
+    }
+    
+    .stMarkdown p {
+        color: #e0e0e0 !important;
+    }
+    
+    .stMarkdown strong {
+        color: #ffffff !important;
+        font-weight: 600;
+    }
+    
+    /* Enhanced box colors */
+    .stContainer > div {
+        background-color: #1a1a1a;
         border-radius: 10px;
+        padding: 1rem;
+        margin: 0.5rem 0;
+    }
+    
+    /* Remove white backgrounds from visualizations */
+    .js-plotly-plot {
+        background-color: transparent !important;
+    }
+    
+    .js-plotly-plot .plotly {
+        background-color: transparent !important;
+    }
+    
+    .js-plotly-plot .main-svg {
+        background-color: transparent !important;
+    }
+    
+    .stPlotlyChart {
+        background-color: #262730 !important;
+        border-radius: 10px !important;
+        padding: 1rem !important;
+        border: 1px solid #464c5c !important;
+        position: relative !important;
+    }
+    
+    /* Position adjustments only - keep original styling */
+    .js-plotly-plot .modebar {
+        position: absolute !important;
+        top: 1rem !important;
+        right: 1rem !important;
+        z-index: 1000 !important;
+    }
+    
+    /* Position legend inside chart container - no styling changes */
+    .js-plotly-plot .legend {
+        position: absolute !important;
+        top: 2rem !important;
+        right: 2rem !important;
+        z-index: 999 !important;
+        margin: 0 !important;
+        transform: translateX(-10px) translateY(10px) !important;
+    }
+    
+    /* Dataframe styling */
+    .stDataFrame {
+        background-color: #262730 !important;
+        border-radius: 10px !important;
+        border: 1px solid #464c5c !important;
+    }
+    
+    .stDataFrame table {
+        background-color: #262730 !important;
+        color: #fafafa !important;
+    }
+    
+    .stDataFrame thead th {
+        background-color: #1a1a1a !important;
+        color: #3b82f6 !important;
+        border-bottom: 2px solid #464c5c !important;
+    }
+    
+    .stDataFrame tbody td {
+        background-color: #262730 !important;
+        color: #e0e0e0 !important;
+        border-bottom: 1px solid #464c5c !important;
+    }
+    
+    /* Enhanced image styling with modern borders */
+    .stImage {
+        background: linear-gradient(135deg, rgba(38, 39, 48, 0.8) 0%, rgba(26, 31, 46, 0.8) 100%) !important;
+        border-radius: 15px !important;
+        padding: 1.5rem !important;
+        border: 1px solid rgba(59, 130, 246, 0.2) !important;
+        backdrop-filter: blur(10px) !important;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2) !important;
+        transition: all 0.3s ease !important;
+        overflow: hidden !important;
+        position: relative !important;
+    }
+    
+    .stImage:hover {
+        transform: scale(1.02) !important;
+        box-shadow: 0 15px 40px rgba(59, 130, 246, 0.3) !important;
+        border-color: rgba(59, 130, 246, 0.4) !important;
+    }
+    
+    .stImage img {
+        border-radius: 10px !important;
+        transition: all 0.3s ease !important;
+    }
+    
+    .stImage::before {
+        content: '' !important;
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        height: 1px !important;
+        background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.6), transparent) !important;
+    }
+    
+    /* Enhanced metric styling */
+    .stMetric {
+        background-color: #262730 !important;
+        border-radius: 10px !important;
+        padding: 1rem !important;
+        border: 1px solid #464c5c !important;
+    }
+    
+    .stMetric label {
+        color: #a3a8b4 !important;
+        font-weight: 500;
+    }
+    
+    .stMetric div[data-testid="metric-container"] > div {
+        color: #3b82f6 !important;
+        font-weight: 600;
+    }
+    
+    /* Enhanced selectbox with dark theme */
+    .stSelectbox {
+        background: transparent !important;
+        border-radius: 12px !important;
+        margin: 0.5rem 0 !important;
+        padding: 0.25rem 0 !important;
+    }
+    
+    .stSelectbox label {
+        color: #ffffff !important;
+        font-weight: 600 !important;
+        font-size: 1rem !important;
+        margin-bottom: 0.5rem !important;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3) !important;
+    }
+    
+    /* Solid dark blue dropdown styling */
+    .stSelectbox > div > div {
+        background: #1e3a8a !important;
+        color: #ffffff !important;
+        font-weight: 700 !important;
+        font-size: 1.1rem !important;
+        border: 2px solid rgba(59, 130, 246, 0.5) !important;
+        border-radius: 12px !important;
+        padding: 0.85rem 1.2rem !important;
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        backdrop-filter: blur(15px) !important;
+        box-shadow: 0 8px 25px rgba(59, 130, 246, 0.15), 0 2px 10px rgba(0, 0, 0, 0.3) !important;
+        position: relative !important;
+        overflow: hidden !important;
+    }
+    
+    .stSelectbox > div > div::before {
+        content: '' !important;
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        height: 1px !important;
+        background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.8), transparent) !important;
+    }
+    
+    .stSelectbox > div > div:hover {
+        border-color: rgba(59, 130, 246, 0.8) !important;
+        background: #2563eb !important;
+        box-shadow: 0 12px 35px rgba(59, 130, 246, 0.25), 0 4px 15px rgba(0, 0, 0, 0.4) !important;
+        transform: translateY(-2px) !important;
+    }
+    
+    .stSelectbox > div > div:focus-within {
+        border-color: #3b82f6 !important;
+        background: #2563eb !important;
+        box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.2), 0 15px 40px rgba(59, 130, 246, 0.3) !important;
+    }
+    
+    /* Dropdown arrow styling */
+    .stSelectbox > div > div > div {
+        color: #ffffff !important;
+    }
+    
+    /* Dark blue dropdown options background */
+    .stSelectbox div[data-baseweb="select"] > div {
+        background: #1e3a8a !important;
+        border: 2px solid rgba(59, 130, 246, 0.6) !important;
+        border-radius: 12px !important;
+        backdrop-filter: blur(20px) !important;
+        box-shadow: 0 15px 40px rgba(59, 130, 246, 0.2), 0 5px 15px rgba(0, 0, 0, 0.5) !important;
+        overflow: hidden !important;
+        position: relative !important;
+    }
+    
+    .stSelectbox div[data-baseweb="select"] > div::before {
+        content: '' !important;
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        height: 1px !important;
+        background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.8), transparent) !important;
+    }
+    
+    /* Dark blue dropdown choices with white text */
+    .stSelectbox div[role="option"] {
+        background: #1e3a8a !important;
+        color: #ffffff !important;
+        font-weight: 700 !important;
+        font-size: 1.1rem !important;
+        padding: 1rem 1.2rem !important;
+        transition: all 0.3s ease !important;
+        border-bottom: 1px solid rgba(59, 130, 246, 0.3) !important;
+        position: relative !important;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8) !important;
+        letter-spacing: 0.5px !important;
+    }
+    
+    .stSelectbox div[role="option"]:hover {
+        background: #2563eb !important;
+        color: #ffffff !important;
+        transform: translateX(4px) !important;
+        padding-left: 1.6rem !important;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.9) !important;
+        font-weight: 800 !important;
+    }
+    
+    .stSelectbox div[role="option"]:last-child {
+        border-bottom: none !important;
+    }
+    
+    /* Ensure dropdown portal menu uses dark blue background and white text */
+    [data-baseweb="menu"] {
+        background: #1e3a8a !important;  /* dark blue background */
+        color: #ffffff !important;
+        border: 2px solid rgba(59, 130, 246, 0.6) !important;
+        border-radius: 12px !important;
+        box-shadow: 0 15px 40px rgba(59, 130, 246, 0.2),
+                    0 5px 15px rgba(0, 0, 0, 0.5) !important;
+        overflow: hidden !important;
+    }
+
+    [data-baseweb="menu"] [role="option"],
+    [data-baseweb="menu"] li {
+    background: #1e3a8a !important;   /* force dark blue background */
+    color: #ffffff !important;        /* white text */
+    font-weight: 700 !important;
+    font-size: 1.1rem !important;
+    padding: 1rem 1.2rem !important;
+    border-bottom: 1px solid rgba(59, 130, 246, 0.3) !important;
+    opacity: 1 !important;            /* no fading */
+    }
+
+    [data-baseweb="menu"] [role="option"]:hover,
+    [data-baseweb="menu"] [role="option"][aria-selected="true"],
+    [data-baseweb="menu"] li:hover {
+        background: #2563eb !important;
+        color: #ffffff !important;
+    }
+
+    /* Enhanced file uploader with dark blue theme */
+    .stFileUploader {
+        background: #1e3a8a !important;
+        border-radius: 15px !important;
+        padding: 2rem !important;
+        border: 2px solid rgba(59, 130, 246, 0.3) !important;
+        backdrop-filter: blur(15px) !important;
+        transition: all 0.3s ease !important;
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3) !important;
+    }
+    
+    .stFileUploader:hover {
+        border-color: rgba(59, 130, 246, 0.6) !important;
+        box-shadow: 0 12px 35px rgba(59, 130, 246, 0.2) !important;
+        transform: translateY(-2px) !important;
+    }
+    
+    .stFileUploader label {
+        color: #ffffff !important;
+        font-weight: 600 !important;
+        font-size: 1.1rem !important;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3) !important;
+    }
+    
+    /* Dark blue upload area with flex layout */
+    .stFileUploader > div {
+        background: #1e3a8a !important;
+        border: 3px dashed rgba(59, 130, 246, 0.8) !important;
+        border-radius: 0.5rem !important;
+        padding: 1rem !important;
+        transition: all 0.3s ease !important;
+        position: relative !important;
+        color: #ffffff !important;
+        display: flex !important;
+        -webkit-box-align: center !important;
+        align-items: center !important;
+        justify-content: center !important;
+        flex-direction: column !important;
+        min-height: 120px !important;
+    }
+    
+    .stFileUploader > div:hover {
+        border-color: #3b82f6 !important;
+        background: #2563eb !important;
+        box-shadow: inset 0 0 20px rgba(59, 130, 246, 0.2) !important;
+    }
+    
+    /* Upload button styling */
+    .stFileUploader button {
+        background: linear-gradient(135deg, #1a1f2e 0%, #262730 100%) !important;
+        color: #ffffff !important;
+        border: 2px solid rgba(59, 130, 246, 0.4) !important;
+        border-radius: 8px !important;
+        padding: 0.75rem 1.5rem !important;
+        font-weight: 600 !important;
+        transition: all 0.3s ease !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+    }
+    
+    .stFileUploader button:hover {
+        background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%) !important;
+        border-color: #3b82f6 !important;
+        transform: translateY(-1px) !important;
+        box-shadow: 0 6px 20px rgba(59, 130, 246, 0.3) !important;
+    }
+    
+    /* Upload text styling */
+    .stFileUploader span {
+        color: #ffffff !important;
+    }
+    
+    .stFileUploader small {
+        color: #ffffff !important;
+    }
+    
+    /* Upload icon */
+    .stFileUploader > div::before {
+        content: '📤' !important;
+        position: absolute !important;
+        top: 1rem !important;
+        right: 1rem !important;
+        font-size: 1.5rem !important;
+        opacity: 0.6 !important;
+    }
+    
+    /* Enhanced drag and drop text */
+    .stFileUploader p {
+        color: #ffffff !important;
+        font-weight: 500 !important;
+        margin: 0.5rem 0 !important;
+        background: transparent !important;
+    }
+    
+    /* Remove white background from drag and drop area */
+    .stFileUploader div[data-testid="stFileUploaderDropzone"] {
+        background: transparent !important;
+        background-color: transparent !important;
+    }
+    
+    /* Remove white background from all file uploader text elements */
+    .stFileUploader span,
+    .stFileUploader div,
+    .stFileUploader p {
+        background: transparent !important;
+        background-color: transparent !important;
+    }
+    /* Specifically target drag and drop text elements */
+    .stFileUploader div[data-testid="stFileUploaderDropzoneInstructions"] {
+        background: transparent !important;
+        background-color: transparent !important;
+        color: #ffffff !important;
+    }
+    
+    /* Target the file size limit text */
+    .stFileUploader div[data-testid="stFileUploaderDropzoneInstructions"] small {
+        background: transparent !important;
+        background-color: transparent !important;
+        color: #ffffff !important;
+    }
+    
+    /* Force transparent background on any nested elements */
+    .stFileUploader * {
+        background-color: transparent !important;
+    }
+    
+    /* Exception: Keep button and main container backgrounds */
+    .stFileUploader button,
+    .stFileUploader > div {
+        background-color: revert !important;
+    }
+    
+    /* Browse files button specific styling */
+    .stFileUploader button[kind="secondary"] {
+
+        border: 2px solid rgba(59, 130, 246, 0.4) !important;
+        border-radius: 8px !important;
+        padding: 0.75rem 1.5rem !important;
+        font-weight: 600 !important;
+        transition: all 0.3s ease !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+        margin: 0.5rem 0 !important;
+    }
+    
+    .stFileUploader button[kind="secondary"]:hover {
+        background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%) !important;
+        border-color: #3b82f6 !important;
+        transform: translateY(-1px) !important;
+        box-shadow: 0 6px 20px rgba(59, 130, 246, 0.3) !important;
+    }
+    
+    /* File upload status text */
+    .stFileUploader div[data-testid="stFileUploaderStatusText"] {
+        color: #9ca3af !important;
+        font-size: 0.9rem !important;
+    }
+    
+    /* Enhanced button styling */
+    .stButton button {
+        background: linear-gradient(135deg, #3b82f6, #1e40af) !important;
+        color: #ffffff !important;
+        border: none !important;
+        border-radius: 8px !important;
+        padding: 0.75rem 2rem !important;
+        font-weight: 600 !important;
+        transition: all 0.3s ease !important;
+    }
+    
+    .stButton button:hover {
+        background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;
+        transform: translateY(-2px) !important;
+        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3) !important;
+    }
+    
+    /* Enhanced tabs */
+    .stTabs [data-baseweb="tab-list"] {
+        background-color: #262730 !important;
+        border-radius: 10px !important;
+        padding: 0.5rem !important;
+        border: 1px solid #464c5c !important;
     }
     
     .stTabs [data-baseweb="tab"] {
-        background-color: #1a202c;
-        color: #e2e8f0;
-        border-radius: 8px;
-        margin: 2px;
+        background-color: transparent !important;
+        color: #a3a8b4 !important;
+        border-radius: 8px !important;
+        padding: 0.75rem 1.5rem !important;
+        font-weight: 500 !important;
+        margin: 0.25rem !important;
     }
     
     .stTabs [aria-selected="true"] {
-        background-color: #4299e1;
-        color: white;
+        background-color: #3b82f6 !important;
+        color: #ffffff !important;
+        font-weight: 600 !important;
     }
     
-    /* Dark mode for file uploader */
-    .stFileUploader {
-        background-color: #2d3748;
-        border: 2px solid #4299e1;
-        border-radius: 10px;
+    /* Enhanced alert styling */
+    .stAlert {
+        background: linear-gradient(135deg, rgba(38, 39, 48, 0.8) 0%, rgba(26, 31, 46, 0.8) 100%) !important;
+        border: 1px solid rgba(59, 130, 246, 0.3) !important;
+        border-radius: 12px !important;
+        color: #fafafa !important;
+        padding: 1rem !important;
+        margin: 0.5rem 0 !important;
+        backdrop-filter: blur(10px) !important;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2) !important;
     }
     
-    /* Dark mode for sliders */
+    .stAlert [data-testid="alertIcon"] {
+        color: #3b82f6 !important;
+    }
+    
+    /* Style alert content */
+    .stAlert > div {
+        background: transparent !important;
+        border: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+    
+    .stAlert div[data-testid="stMarkdownContainer"] {
+        background: transparent !important;
+        color: #ffffff !important;
+    }
+    
+    /* Solid dark blue sidebar selectbox */
+    .stSidebar .stSelectbox > div > div {
+        background: #1e3a8a !important;
+        color: #ffffff !important;
+        font-weight: 700 !important;
+        font-size: 1.1rem !important;
+        border: 2px solid rgba(59, 130, 246, 0.5) !important;
+        border-radius: 12px !important;
+        padding: 0.85rem 1.2rem !important;
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        backdrop-filter: blur(15px) !important;
+        box-shadow: 0 8px 25px rgba(59, 130, 246, 0.15), 0 2px 10px rgba(0, 0, 0, 0.3) !important;
+        position: relative !important;
+        overflow: hidden !important;
+    }
+    
+    .stSidebar .stSelectbox > div > div::before {
+        content: '' !important;
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        height: 1px !important;
+        background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.8), transparent) !important;
+    }
+    
+    .stSidebar .stSelectbox > div > div:hover {
+        border-color: rgba(59, 130, 246, 0.8) !important;
+        background: #2563eb !important;
+        box-shadow: 0 12px 35px rgba(59, 130, 246, 0.25), 0 4px 15px rgba(0, 0, 0, 0.4) !important;
+        transform: translateY(-2px) !important;
+    }
+    
+    .stSidebar .stSelectbox label {
+        color: #ffffff !important;
+        font-weight: 600 !important;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3) !important;
+    }
+    
+    .stSidebar .stButton button {
+        width: 100% !important;
+        background: linear-gradient(135deg, #3b82f6, #1e40af) !important;
+        margin: 0.5rem 0 !important;
+    }
+    
+    /* Enhanced radio button styling to match dark theme */
+    .stRadio {
+        background: transparent !important;
+        padding: 0.5rem 0 !important;
+    }
+    
+    .stRadio label {
+        color: #ffffff !important;
+        font-weight: 600 !important;
+        font-size: 1rem !important;
+        margin-bottom: 0.8rem !important;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3) !important;
+    }
+    
+    .stRadio > div {
+        background: transparent !important;
+        border-radius: 12px !important;
+        padding: 0.5rem 0 !important;
+    }
+    
+    .stRadio div[role="radiogroup"] {
+        background: transparent !important;
+        border: none !important;
+        padding: 0 !important;
+    }
+    
+    .stRadio div[role="radiogroup"] > label {
+        background: transparent !important;
+        color: #ffffff !important;
+        font-weight: 500 !important;
+        font-size: 1rem !important;
+        padding: 0.8rem 1rem !important;
+        margin: 0.3rem 0 !important;
+        border-radius: 10px !important;
+        transition: all 0.3s ease !important;
+        cursor: pointer !important;
+        border: 1px solid rgba(59, 130, 246, 0.2) !important;
+        display: flex !important;
+        align-items: center !important;
+    }
+    
+    .stRadio div[role="radiogroup"] > label:hover {
+        background: rgba(59, 130, 246, 0.1) !important;
+        border-color: rgba(59, 130, 246, 0.4) !important;
+        transform: translateX(2px) !important;
+    }
+    
+    .stRadio div[role="radiogroup"] > label > div {
+        color: #ffffff !important;
+    }
+    
+    /* Radio button circle styling */
+    .stRadio input[type="radio"] {
+        accent-color: #3b82f6 !important;
+        margin-right: 0.8rem !important;
+        transform: scale(1.2) !important;
+    }
+    
+    /* Selected radio option styling */
+    .stRadio div[role="radiogroup"] > label[data-checked="true"] {
+        background: rgba(59, 130, 246, 0.15) !important;
+        border-color: #3b82f6 !important;
+        color: #ffffff !important;
+        font-weight: 600 !important;
+    }
+    
+    /* Simple slider styling */
     .stSlider {
-        background-color: #2d3748;
+        padding: 0.5rem 0 !important;
     }
     
-    /* Dark mode for selectboxes */
-    .stSelectbox {
-        background-color: #2d3748;
-        color: #e2e8f0;
+    .stSlider label {
+        color: #ffffff !important;
+        font-weight: 500 !important;
+        font-size: 0.9rem !important;
+        margin-bottom: 0.5rem !important;
     }
     
-    /* Dark mode for buttons */
-    .stButton > button {
-        background-color: #4299e1;
-        color: white;
-        border: none;
-        border-radius: 8px;
-        padding: 10px 20px;
-        font-weight: 600;
-        transition: all 0.3s ease;
+    /* Simple slider track */
+    .stSlider > div > div > div {
+        background: #464c5c !important;
+        height: 4px !important;
+        border-radius: 2px !important;
     }
     
-    .stButton > button:hover {
-        background-color: #3182ce;
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(66, 153, 225, 0.3);
+    /* Simple slider thumb */
+    .stSlider > div > div > div > div {
+        background: #3b82f6 !important;
+        border: none !important;
+        width: 16px !important;
+        height: 16px !important;
+        border-radius: 50% !important;
+        box-shadow: none !important;
+        transition: background-color 0.2s ease !important;
+    }
+    
+    .stSlider > div > div > div > div:hover {
+        background: #2563eb !important;
+        transform: none !important;
+        box-shadow: none !important;
+    }
+    
+    /* Enhanced loading and progress indicators */
+    .stSpinner {
+        border-color: #3b82f6 !important;
+    }
+    
+    .stProgress > div > div {
+        background: linear-gradient(90deg, #3b82f6 0%, #6366f1 100%) !important;
+        border-radius: 10px !important;
+    }
+    
+    /* Enhanced alert and message styling */
+    .stSuccess {
+        background: linear-gradient(135deg, rgba(38, 39, 48, 0.8) 0%, rgba(26, 31, 46, 0.8) 100%) !important;
+        border: 1px solid rgba(59, 130, 246, 0.3) !important;
+        border-radius: 12px !important;
+        padding: 1rem !important;
+        margin: 0.5rem 0 !important;
+        backdrop-filter: blur(10px) !important;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2) !important;
+    }
+    
+    .stSuccess > div {
+        background: transparent !important;
+        border: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+    
+    .stSuccess div[data-testid="stAlert"] {
+        background: transparent !important;
+        border: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+    
+    .stWarning {
+        background: linear-gradient(135deg, rgba(251, 191, 36, 0.1) 0%, rgba(251, 191, 36, 0.05) 100%) !important;
+        border: 1px solid rgba(251, 191, 36, 0.3) !important;
+        border-radius: 12px !important;
+    }
+    
+    .stError {
+        background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(239, 68, 68, 0.05) 100%) !important;
+        border: 1px solid rgba(239, 68, 68, 0.3) !important;
+        border-radius: 12px !important;
+    }
+    
+    .stInfo {
+        background: linear-gradient(135deg, rgba(38, 39, 48, 0.8) 0%, rgba(26, 31, 46, 0.8) 100%) !important;
+        border: 1px solid rgba(59, 130, 246, 0.3) !important;
+        border-radius: 12px !important;
+        padding: 1rem !important;
+        margin: 0.5rem 0 !important;
+        backdrop-filter: blur(10px) !important;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2) !important;
+    }
+    
+    .stInfo > div {
+        background: transparent !important;
+        border: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+    
+    .stInfo div[data-testid="stAlert"] {
+        background: transparent !important;
+        border: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+    
+    /* Responsive design improvements */
+    @media (max-width: 768px) {
+        .main .block-container {
+            padding-left: 1rem !important;
+            padding-right: 1rem !important;
+        }
+        
+        .main-header {
+            padding: 2rem 1rem !important;
+            margin-bottom: 1rem !important;
+        }
+        
+        .main-header h1 {
+            font-size: 1.8rem !important;
+        }
+        
+        .info-box, .metric-card, .visualization-container {
+            padding: 1rem !important;
+            margin: 0.75rem 0 !important;
+        }
+        
+        .prediction-box {
+            padding: 1.5rem !important;
+        }
+        
+        /* Stack columns on mobile */
+        .row-widget.stColumn {
+            width: 100% !important;
+        }
+        
+        /* Adjust font sizes for mobile */
+        .metric-card h3 {
+            font-size: 1.5rem !important;
+        }
+        
+        .stButton button {
+            width: 100% !important;
+            padding: 0.75rem 1.5rem !important;
+        }
+    }
+    
+    @media (max-width: 480px) {
+        .main-header h1 {
+            font-size: 1.5rem !important;
+        }
+        
+        .main-header p {
+            font-size: 1rem !important;
+        }
+        
+        .info-box, .metric-card, .visualization-container {
+            padding: 0.75rem !important;
+        }
+        
+        .prediction-box {
+            padding: 1rem !important;
+        }
+    }
+    
+    /* Loading and performance optimizations */
+    .stImage img {
+        max-width: 100% !important;
+        height: auto !important;
+        object-fit: contain !important;
+    }
+    
+    /* Smooth scrolling */
+    html {
+        scroll-behavior: smooth !important;
+    }
+    
+    /* Performance: Hardware acceleration for animations */
+    .metric-card, .info-box, .prediction-box, .visualization-container {
+        will-change: transform !important;
+        backface-visibility: hidden !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -356,8 +1186,8 @@ def load_class_names():
     """Load class names from traffic sign classes mapping"""
     try:
         return get_class_names()
-    except:
-        st.warning("Could not load class names. Using numeric labels.")
+    except Exception as e:
+        st.error(f"⚠️ Could not load class names: {str(e)}. Using numeric labels as fallback.")
         return None
 
 CLASS_NAMES = load_class_names()
@@ -367,16 +1197,70 @@ CLASS_NAMES = load_class_names()
 # =========================
 @st.cache_resource
 def load_models():
-    """Load trained models with caching"""
+    """Load trained models with caching and detailed error handling"""
+    cnn_model, mobilenet_model = None, None
+    
     try:
-        cnn_model = tf.keras.models.load_model("models/cnn_model.h5")
-        mobilenet_model = tf.keras.models.load_model("models/mobilenet_model.h5")
-        return cnn_model, mobilenet_model
+        # Try to load CNN model
+        if os.path.exists("models/cnn_model.h5"):
+            cnn_model = tf.keras.models.load_model("models/cnn_model.h5")
+        else:
+            st.warning("⚠️ Custom CNN model file not found at 'models/cnn_model.h5'")
+            
     except Exception as e:
-        st.error(f"Error loading models: {e}")
-        return None, None
+        st.error(f"❌ Failed to load Custom CNN model: {str(e)}")
+    
+    try:
+        # Try to load MobileNet model
+        if os.path.exists("models/mobilenet_model.h5"):
+            mobilenet_model = tf.keras.models.load_model("models/mobilenet_model.h5")
+        else:
+            st.warning("⚠️ MobileNetV2 model file not found at 'models/mobilenet_model.h5'")
+            
+    except Exception as e:
+        st.error(f"❌ Failed to load MobileNetV2 model: {str(e)}")
+    
+    # Check if any models were loaded
+    if cnn_model is None and mobilenet_model is None:
+        st.error("🚨 **Critical Error**: No models could be loaded! Please ensure model files exist in the 'models/' directory.")
+        st.info("💡 **Tip**: Run the training script to generate the model files.")
+        
+    return cnn_model, mobilenet_model
 
 custom_model, mobilenet_model = load_models()
+
+# =========================
+# Performance Optimization Functions
+# =========================
+@st.cache_data
+def process_uploaded_image(uploaded_file_bytes, file_type):
+    """Process uploaded image with caching for better performance"""
+    try:
+        # Convert bytes to numpy array
+        file_bytes = np.asarray(bytearray(uploaded_file_bytes), dtype=np.uint8)
+        image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+        
+        if image is None:
+            raise ValueError("Invalid image format")
+        
+        # Basic validation
+        if image.shape[0] < 32 or image.shape[1] < 32:
+            raise ValueError("Image too small (minimum 32x32 pixels)")
+            
+        return image, True, None
+    except Exception as e:
+        return None, False, str(e)
+
+@st.cache_data
+def get_cached_prediction(image_hash, model_name):
+    """Cache predictions to avoid recomputation"""
+    # This would normally store predictions, but for now just return None
+    # In production, you might use Redis or a database for this
+    return None
+
+def calculate_image_hash(image):
+    """Calculate hash of image for caching purposes"""
+    return hash(image.tobytes())
 
 # =========================
 # Enhanced User-Friendly UI
@@ -409,7 +1293,7 @@ def main():
         
         # Model selection with better descriptions
         st.markdown("**🤖 Choose Your AI Model:**")
-        model_choice = st.selectbox(
+        model_choice = st.radio(
             "Select Model:",
             ["Custom CNN", "MobileNetV2"],
             help="Custom CNN offers better accuracy, MobileNetV2 is faster"
@@ -417,7 +1301,7 @@ def main():
         
         # Model comparison info
         if model_choice == "Custom CNN":
-            st.success("✅ **Custom CNN Selected**")
+            st.success(" **Custom CNN Selected**")
             st.markdown("""
             **Performance:**
             - 🎯 Accuracy: 96%
@@ -426,7 +1310,7 @@ def main():
             - 🎯 Best for: High accuracy requirements
             """)
         else:
-            st.info("ℹ️ **MobileNetV2 Selected**")
+            st.info("**MobileNetV2 Selected**")
             st.markdown("""
             **Performance:**
             - 🎯 Accuracy: 53%
@@ -480,9 +1364,21 @@ def main():
             )
             
             if uploaded_file is not None:
-                # Read and display image
-                file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
-                image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+                # Validate file size (max 10MB)
+                if uploaded_file.size > 10 * 1024 * 1024:
+                    st.error("❌ **File too large!** Please upload an image smaller than 10MB.")
+                    st.stop()
+                
+                # Process image with caching
+                with st.spinner("📸 Processing your image..."):
+                    image, success, error_msg = process_uploaded_image(
+                        uploaded_file.read(), uploaded_file.type
+                    )
+                
+                if not success:
+                    st.error(f"❌ **Error processing image**: {error_msg}")
+                    st.info("💡 **Tip**: Try uploading a different image or check the file format.")
+                    st.stop()
                 
                 # Display original image with better styling
                 st.markdown("#### 📷 **Uploaded Image**")
@@ -498,23 +1394,49 @@ def main():
                 </div>
                 """.format(image.shape[1], image.shape[0], uploaded_file.type), unsafe_allow_html=True)
                 
-                # Preprocess image
-                img_processed = preprocess_image_for_prediction(image, target_size=48)
+                # Preprocess image with error handling
+                try:
+                    img_processed = preprocess_image_for_prediction(image, target_size=48)
+                except Exception as e:
+                    st.error(f"❌ **Error preprocessing image**: {str(e)}")
+                    st.stop()
                 
-                # Get model
-                if model_choice == "Custom CNN" and custom_model is not None:
-                    model = custom_model
-                elif model_choice == "MobileNetV2" and mobilenet_model is not None:
-                    model = mobilenet_model
-                else:
-                    st.error("❌ Model not available. Please check if models are loaded correctly.")
-                    pass
+                # Get model with enhanced validation
+                model = None
+                if model_choice == "Custom CNN":
+                    if custom_model is not None:
+                        model = custom_model
+                        st.success("🤖 Using Custom CNN model for prediction")
+                    else:
+                        st.error("❌ **Custom CNN model not available!** Please select MobileNetV2 or check model files.")
+                        st.stop()
+                elif model_choice == "MobileNetV2":
+                    if mobilenet_model is not None:
+                        model = mobilenet_model
+                        st.success("🤖 Using MobileNetV2 model for prediction")
+                    else:
+                        st.error("❌ **MobileNetV2 model not available!** Please select Custom CNN or check model files.")
+                        st.stop()
                 
-                # Get predictions
-                with st.spinner("🤖 AI is analyzing your image..."):
-                    prediction_results = get_prediction_with_confidence(
-                        model, img_processed, CLASS_NAMES, top_k=5
-                    )
+                if model is None:
+                    st.error("🚨 **No model selected or available!** Please check your model selection and ensure models are loaded.")
+                    st.stop()
+                
+                # Get predictions with error handling
+                try:
+                    with st.spinner("🤖 AI is analyzing your image..."):
+                        prediction_results = get_prediction_with_confidence(
+                            model, img_processed, CLASS_NAMES, top_k=5
+                        )
+                        
+                        if not prediction_results or 'predicted_class' not in prediction_results:
+                            st.error("❌ **Prediction failed!** The model could not analyze the image.")
+                            st.stop()
+                            
+                except Exception as e:
+                    st.error(f"❌ **Prediction error**: {str(e)}")
+                    st.info("💡 **Suggestions**: Try a different image or model, or check if the image contains a clear traffic sign.")
+                    st.stop()
                 
                 # Display results in second column
                 with col2:
@@ -683,14 +1605,29 @@ def main():
                 ])
                 
                 fig.update_layout(
-                    title="Prediction Confidence Scores",
+                    title={
+                        "text": "Prediction Confidence Scores",
+                        "x": 0.5,
+                        "font": {"size": 18, "color": "#ffffff", "family": "Segoe UI"}
+                    },
                     xaxis_title="Confidence (%)",
                     yaxis_title="Traffic Sign Class",
                     height=400,
                     showlegend=False,
                     plot_bgcolor='rgba(0,0,0,0)',
                     paper_bgcolor='rgba(0,0,0,0)',
-                    font=dict(size=12)
+                    font=dict(size=12, color="#ffffff", family="Segoe UI"),
+                    xaxis=dict(
+                        gridcolor='rgba(59, 130, 246, 0.2)',
+                        tickcolor="#ffffff",
+                        title=dict(font=dict(color="#ffffff"))
+                    ),
+                    yaxis=dict(
+                        gridcolor='rgba(59, 130, 246, 0.2)',
+                        tickcolor="#ffffff",
+                        title=dict(font=dict(color="#ffffff"))
+                    ),
+                    margin=dict(l=50, r=50, t=80, b=50)
                 )
                 
                 st.plotly_chart(fig, use_container_width=True)
@@ -726,11 +1663,29 @@ def main():
                 ])
                 
                 fig3.update_layout(
-                    title="Average Confidence by Category",
+                    title={
+                        "text": "Average Confidence by Category",
+                        "x": 0.5,
+                        "font": {"size": 16, "color": "#ffffff", "family": "Segoe UI"}
+                    },
                     xaxis_title="Category",
                     yaxis_title="Average Confidence (%)",
                     height=300,
-                    showlegend=False
+                    showlegend=False,
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    font=dict(size=11, color="#ffffff", family="Segoe UI"),
+                    xaxis=dict(
+                        gridcolor='rgba(59, 130, 246, 0.2)',
+                        tickcolor="#ffffff",
+                        title=dict(font=dict(color="#ffffff"))
+                    ),
+                    yaxis=dict(
+                        gridcolor='rgba(59, 130, 246, 0.2)',
+                        tickcolor="#ffffff",
+                        title=dict(font=dict(color="#ffffff"))
+                    ),
+                    margin=dict(l=50, r=50, t=60, b=50)
                 )
                 
                 st.plotly_chart(fig3, use_container_width=True)
@@ -754,11 +1709,29 @@ def main():
             ])
             
             fig4.update_layout(
-                title="Confidence Trend Across Top Predictions",
+                title={
+                    "text": "Confidence Trend Across Top Predictions",
+                    "x": 0.5,
+                    "font": {"size": 16, "color": "#ffffff", "family": "Segoe UI"}
+                },
                 xaxis_title="Prediction Rank",
                 yaxis_title="Confidence (%)",
                 height=300,
-                showlegend=False
+                showlegend=False,
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                font=dict(size=11, color="#ffffff", family="Segoe UI"),
+                xaxis=dict(
+                    gridcolor='rgba(59, 130, 246, 0.2)',
+                    tickcolor="#ffffff",
+                    title=dict(font=dict(color="#ffffff"))
+                ),
+                yaxis=dict(
+                    gridcolor='rgba(59, 130, 246, 0.2)',
+                    tickcolor="#ffffff",
+                    title=dict(font=dict(color="#ffffff"))
+                ),
+                margin=dict(l=50, r=50, t=60, b=50)
             )
             
             st.plotly_chart(fig4, use_container_width=True)
@@ -796,11 +1769,29 @@ def main():
         ])
         
         fig.update_layout(
-            title="Model Accuracy Comparison",
+            title={
+                "text": "Model Accuracy Comparison",
+                "x": 0.5,
+                "font": {"size": 16, "color": "#ffffff", "family": "Segoe UI"}
+            },
             xaxis_title="Model",
             yaxis_title="Accuracy (%)",
             height=300,
-            showlegend=False
+            showlegend=False,
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            font=dict(size=11, color="#ffffff", family="Segoe UI"),
+            xaxis=dict(
+                gridcolor='rgba(59, 130, 246, 0.2)',
+                tickcolor="#ffffff",
+                title=dict(font=dict(color="#ffffff"))
+            ),
+            yaxis=dict(
+                gridcolor='rgba(59, 130, 246, 0.2)',
+                tickcolor="#ffffff",
+                title=dict(font=dict(color="#ffffff"))
+            ),
+            margin=dict(l=50, r=50, t=60, b=50)
         )
         
         st.plotly_chart(fig, use_container_width=True)
@@ -847,7 +1838,6 @@ def main():
             fig2 = px.pie(
                 values=list(category_counts.values()),
                 names=list(category_counts.keys()),
-                title="Images by Category",
                 color=list(category_counts.keys()),
                 color_discrete_map=CATEGORY_COLORS
             )
